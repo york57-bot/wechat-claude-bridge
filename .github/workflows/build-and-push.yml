@@ -39,8 +39,27 @@ jobs:
 
       - name: Make package public
         run: |
-          curl -s -X PATCH \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github+json" \
-            https://api.github.com/user/packages/container/${{ github.event.repository.name }}/visibility \
-            -d '{"visibility":"public"}'
+          set -x
+          PACKAGE="${{ github.event.repository.name }}"
+          OWNER="${{ github.repository_owner }}"
+
+          # Try user-scoped endpoint first, then org-scoped
+          for endpoint in \
+            "https://api.github.com/user/packages/container/${PACKAGE}/visibility" \
+            "https://api.github.com/users/${OWNER}/packages/container/${PACKAGE}/visibility"; do
+            echo "Trying: $endpoint"
+            RESP=$(curl -s -w "\n%{http_code}" -X PATCH \
+              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              "$endpoint" \
+              -d '{"visibility":"public"}')
+            HTTP_CODE=$(echo "$RESP" | tail -1)
+            BODY=$(echo "$RESP" | sed '$d')
+            echo "HTTP $HTTP_CODE: $BODY"
+            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "204" ]; then
+              echo "Package is now public!"
+              exit 0
+            fi
+          done
+          echo "Warning: Could not set package public via API. Check settings manually."
+          exit 0
