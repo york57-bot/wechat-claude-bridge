@@ -330,6 +330,8 @@ async function runDaemon(): Promise<void> {
   logger.info('Daemon started', { accountId: account.accountId });
   console.log(`已启动 (账号: ${account.accountId})`);
 
+  startHealthServer();
+
   await monitor.run();
 }
 
@@ -682,6 +684,26 @@ async function sendToClaude(
     if (activeControllers.get(account.accountId) === abortController) {
       activeControllers.delete(account.accountId);
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Health server (for Hugging Face Spaces / cloud platforms)
+// ---------------------------------------------------------------------------
+
+function startHealthServer(): void {
+  const PORT = parseInt(process.env.HEALTH_PORT || '7860', 10);
+  try {
+    const { createServer } = require('node:http') as typeof import('node:http');
+    const server = createServer((_req: any, res: any) => {
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end('ok\n');
+    });
+    server.listen(PORT, () => {
+      logger.info('Health server listening', { port: PORT });
+    });
+  } catch {
+    // Silently ignore — health server is optional
   }
 }
 

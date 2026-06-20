@@ -33,5 +33,8 @@ ENV NODE_ENV=production
 ENV HOME=/root
 ENV CLAUDE_CODE_CI_MODE=true
 ENV CLAUDE_CODE_QUIET=true
+ENV HEALTH_PORT=7860
+
+EXPOSE 7860
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
