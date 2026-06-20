@@ -38,28 +38,23 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
       - name: Make package public
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -x
-          PACKAGE="${{ github.event.repository.name }}"
-          OWNER="${{ github.repository_owner }}"
+          # ghcr.io packages use org-level API, not user-level
+          # Try gh CLI first (it handles auth correctly)
+          echo "Trying gh CLI..."
+          gh api --method GET "user/packages?package_type=container" || true
 
-          # Try user-scoped endpoint first, then org-scoped
-          for endpoint in \
-            "https://api.github.com/user/packages/container/${PACKAGE}/visibility" \
-            "https://api.github.com/users/${OWNER}/packages/container/${PACKAGE}/visibility"; do
-            echo "Trying: $endpoint"
-            RESP=$(curl -s -w "\n%{http_code}" -X PATCH \
-              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-              -H "Accept: application/vnd.github+json" \
-              "$endpoint" \
-              -d '{"visibility":"public"}')
-            HTTP_CODE=$(echo "$RESP" | tail -1)
-            BODY=$(echo "$RESP" | sed '$d')
-            echo "HTTP $HTTP_CODE: $BODY"
-            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "204" ]; then
-              echo "Package is now public!"
-              exit 0
-            fi
-          done
-          echo "Warning: Could not set package public via API. Check settings manually."
-          exit 0
+          # The correct endpoint for GHCR visibility is:
+          # PUT /orgs/{org}/packages/container/{package}/visibility
+          # or for users: PATCH /user/packages/container/{package_name}/visibility
+          # With GHCR, the "package_name" includes the namespace
+          echo "Trying GHCR API..."
+          curl -s -X PATCH \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/orgs/${{ github.repository_owner }}/packages/container/${{ github.event.repository.name }}/visibility" \
+            -d '{"visibility":"public"}' || true
+          echo "Done. If it didn't work, make public manually at: https://github.com/${{ github.repository_owner }}?tab=packages"
